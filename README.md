@@ -286,6 +286,7 @@ ewe --setup
 > **Same SSID or separate SSID?**
 >
 > Using the same SSID and password can provide a familiar roaming experience, but client roaming is ultimately controlled by the client device. For easier testing, use a distinct AP SSID such as `HomeNet-E.W.E`.
+> The `-E.W.E` extension is added by default, in order to disable and use pure input SSID set this as the environment variable: `WIFI_SSID_NAME_EXTENSION=0`
 
 > [!NOTE]
 > Some chipsets cannot run client + AP mode on **one** radio simultaneously. This is why EWE requires two separate WiFi interfaces.
