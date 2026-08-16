@@ -291,7 +291,7 @@ ewe --setup
 > [!NOTE]
 > Some chipsets cannot run client + AP mode on **one** radio simultaneously. This is why EWE requires two separate WiFi interfaces.
 >
-> The first `sudo ewe` run needs internet access to fetch `lnxrouter` and any missing dependencies.
+> The first `ewe` run needs internet access to fetch `lnxrouter` and any missing dependencies.
 
 ## Troubleshooting
 
