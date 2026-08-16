@@ -8,7 +8,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Built with uv](https://img.shields.io/badge/built%20with-uv-de5fe9)](https://docs.astral.sh/uv/)
 [![Linux only](https://img.shields.io/badge/platform-linux-lightgrey)](#requirements)
-[![AI Assisted](https://img.shields.io/badge/AI-Assisted%20Development-8A2BE2?logo=openai&logoColor=white)](#-ai-development-disclosure)
+[![AI Assisted](https://img.shields.io/badge/AI-Assisted%20Development-8A2BE2?logo=openai&logoColor=white)](#ai-development-disclosure)
 
 *One interface joins your existing WiFi. The other rebroadcasts it.*
 
