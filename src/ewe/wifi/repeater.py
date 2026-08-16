@@ -4,7 +4,7 @@ import logging
 import subprocess
 
 from ewe.foundation.util import EweError, command_exists, has_networkmanager, run
-from ewe.foundation.constants import WIFI_SSID_NAME_EXTENSION
+from ewe.foundation.constants import WIFI_SSID_NAME_EXTENSION, WIFI_POWER_SAVING_OFF
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +22,23 @@ class WifiRepeater:
         self.ap_iface = ap_iface
         self.wifi_iface = wifi_iface
 
+    # ---------- power saving ----------
+
+    def _set_power_saving(self, enabled_off: bool) -> None:
+        """Enable or disable WiFi power saving on both E.W.E interfaces."""
+        if not enabled_off:
+            return
+
+        for iface in (self.wifi_iface, self.ap_iface):
+            try:
+                run(["iw", "dev", iface, "set", "power_save", "off"])
+                log.info("Disabled WiFi power saving on %s", iface)
+            except subprocess.CalledProcessError:
+                log.warning(
+                    "Could not disable WiFi power saving on %s",
+                    iface,
+                )
+
     # ---------- uplink (connect to the existing network) ----------
 
     def connect_uplink(self, ssid: str, password: str, timeout: int = 30) -> None:
@@ -35,19 +52,28 @@ class WifiRepeater:
         else:
             self._connect_uplink_wpa_supplicant(ssid, password, timeout)
 
-    def _connect_uplink_nmcli(self, ssid: str, password: str, timeout: int) -> None:
-        log.info(f"Connecting {self.wifi_iface} to '{ssid}' via NetworkManager")
+        self._set_power_saving(WIFI_POWER_SAVING_OFF)
+
+    def _connect_uplink_nmcli(
+        self,
+        ssid: str,
+        password: str,
+        timeout: int,
+    ) -> None:
+        log.info(
+            "Connecting %s to '%s' via NetworkManager",
+            self.wifi_iface,
+            ssid,
+        )
 
         connection_name = f"ewe-uplink-{self.wifi_iface}"
 
         try:
-            # Remove an old E.W.E profile if one exists.
             run(
                 ["nmcli", "connection", "delete", connection_name],
                 check=False,
             )
 
-            # Create the WiFi profile explicitly.
             run(
                 [
                     "nmcli",
@@ -65,22 +91,27 @@ class WifiRepeater:
                 timeout=timeout,
             )
 
-            # Explicitly configure WPA-PSK.
-            run(
-                [
-                    "nmcli",
-                    "connection",
-                    "modify",
-                    connection_name,
-                    "wifi-sec.key-mgmt",
-                    "wpa-psk",
-                    "wifi-sec.psk",
-                    password,
-                ],
-                timeout=timeout,
-            )
+            modify_args = [
+                "nmcli",
+                "connection",
+                "modify",
+                connection_name,
+                "wifi-sec.key-mgmt",
+                "wpa-psk",
+                "wifi-sec.psk",
+                password,
+            ]
 
-            # Bring the connection up.
+            if WIFI_POWER_SAVING_OFF:
+                modify_args.extend(
+                    [
+                        "802-11-wireless.powersave",
+                        "2",
+                    ]
+                )
+
+            run(modify_args, timeout=timeout)
+
             run(
                 [
                     "nmcli",
@@ -97,7 +128,10 @@ class WifiRepeater:
             ) from e
 
     def _connect_uplink_wpa_supplicant(
-        self, ssid: str, password: str, timeout: int
+        self,
+        ssid: str,
+        password: str,
+        timeout: int,
     ) -> None:
         if not command_exists("wpa_supplicant") or not command_exists("dhclient"):
             raise EweError(
@@ -105,7 +139,11 @@ class WifiRepeater:
                 "aren't both available; can't connect the uplink interface."
             )
 
-        log.info(f"Connecting {self.wifi_iface} to '{ssid}' via wpa_supplicant")
+        log.info(
+            "Connecting %s to '%s' via wpa_supplicant",
+            self.wifi_iface,
+            ssid,
+        )
 
         conf_path = f"/tmp/ewe-wpa-{self.wifi_iface}.conf"
         wpa_conf = (
@@ -116,12 +154,24 @@ class WifiRepeater:
             f'    psk="{password}"\n'
             "}\n"
         )
+
         with open(conf_path, "w") as f:
             f.write(wpa_conf)
 
-        # Clear out any stale supplicant instance for this interface first.
-        run(["pkill", "-f", f"wpa_supplicant.*{self.wifi_iface}"], check=False)
-        run(["wpa_supplicant", "-B", "-i", self.wifi_iface, "-c", conf_path])
+        run(
+            ["pkill", "-f", f"wpa_supplicant.*{self.wifi_iface}"],
+            check=False,
+        )
+        run(
+            [
+                "wpa_supplicant",
+                "-B",
+                "-i",
+                self.wifi_iface,
+                "-c",
+                conf_path,
+            ]
+        )
         run(["dhclient", self.wifi_iface], timeout=timeout)
 
     # ---------- access point (bridge Internet from wifi_iface) ----------
@@ -132,12 +182,13 @@ class WifiRepeater:
         password: str,
         channel: int | None = None,
     ) -> None:
-        """Start the repeater AP. Blocks in the foreground until stopped
-        (Ctrl+C or SIGTERM) — lnxrouter owns hostapd/dnsmasq/iptables
-        cleanup on exit, so we don't want to detach from it.
-        """
+        """Start the repeater AP."""
         if WIFI_SSID_NAME_EXTENSION:
             ssid = f"{ssid}-E.W.E"
+
+        # AP interface is configured by lnxrouter, but disable power saving
+        # beforehand when requested.
+        self._set_power_saving(WIFI_POWER_SAVING_OFF)
 
         command = [
             "lnxrouter",
@@ -154,6 +205,10 @@ class WifiRepeater:
             command.extend(["--channel", str(channel)])
 
         log.info(
-            f"Starting access point '{ssid}' on {self.ap_iface}, bridging from {self.wifi_iface}"
+            "Starting access point '%s' on %s, bridging from %s",
+            ssid,
+            self.ap_iface,
+            self.wifi_iface,
         )
+
         subprocess.run(command, check=True)

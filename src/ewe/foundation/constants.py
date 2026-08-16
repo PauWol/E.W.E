@@ -98,7 +98,9 @@ DEFAULT_DOT_ENV = {
     "LOG_ROTATE": "1",
     "LOG_MAX_BYTES": "10485760",
     "LOG_BACKUP_COUNT": "1",
+    # ---
     "WIFI_SSID_NAME_EXTENSION": "1",
+    "WIFI_POWER_SAVING_OFF": "1",
 }
 
 _DEV = DEFAULT_DOT_ENV
@@ -123,3 +125,6 @@ WIFI_PSK = get_env_str("WIFI_PSK", "")
 WIFI_AP_IFACE = get_env_str("WIFI_AP_IFACE", "")
 WIFI_UPLINK_IFACE = get_env_str("WIFI_UPLINK_IFACE", "")
 WIFI_CHANNEL = get_env_str("WIFI_CHANNEL", "")
+WIFI_POWER_SAVING_OFF = get_env_bool(
+    "WIFI_POWER_SAVING_OFF", _DEV["WIFI_POWER_SAVING_OFF"]
+)
