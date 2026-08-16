@@ -186,10 +186,6 @@ class WifiRepeater:
         if WIFI_SSID_NAME_EXTENSION:
             ssid = f"{ssid}-E.W.E"
 
-        # AP interface is configured by lnxrouter, but disable power saving
-        # beforehand when requested.
-        self._set_power_saving(WIFI_POWER_SAVING_OFF)
-
         command = [
             "lnxrouter",
             "--ap",
