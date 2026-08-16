@@ -65,6 +65,12 @@ def get_env_float(key: str, default: str) -> float:
 
 def set_env(key: str, value: T):  # pyright: ignore[reportInvalidTypeVarUse]
     _path = ENV_PATH
+
+    _path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not _path.is_file():
+        _ = _path.write_text("", encoding="utf-8")
+
     _updated = False
 
     lines = _path.read_text("utf-8").splitlines()
