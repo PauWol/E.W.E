@@ -45,7 +45,7 @@ def install_systemd_service(start_now: bool = False) -> None:
     else:
         home = Path.home()
 
-    exec_start = f"{sys.executable} -m ewe.cli --from-env"
+    exec_start = f"{sys.executable} -m ewe.cli from-env"
 
     SERVICE_PATH.write_text(
         SERVICE_TEMPLATE.format(

@@ -232,8 +232,6 @@ Check the installed version with:
 ewe --version
 ```
 
-```
-
 For a normal user, I’d recommend just `uv tool upgrade ewe`; the `--force` command is useful when you want to explicitly refresh the Git-based installation.
 
 
