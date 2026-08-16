@@ -260,10 +260,11 @@ For a normal user, I’d recommend just `uv tool upgrade ewe`; the `--force` com
 | Command              | Description                                  |
 | -------------------- | -------------------------------------------- |
 | `ewe`                | Start the interactive setup wizard           |
-| `ewe --setup`        | Start the setup wizard explicitly            |
-| `ewe --from-env`     | Start using the saved configuration          |
-| `ewe --install-deps` | Check/install required dependencies and exit |
+| `ewe setup`        | Start the setup wizard explicitly            |
+| `ewe from-env`     | Start using the saved configuration          |
+| `ewe install-deps` | Check/install required dependencies and exit |
 | `ewe --help`         | Show CLI help                                |
+| `ewe --version` | Show the Version of E.W.E installed |
 
 `--from-env` is non-interactive and is intended for systemd.
 
