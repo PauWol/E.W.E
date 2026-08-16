@@ -5,16 +5,22 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.prompt import Confirm
+
 from ewe.foundation.util import EweError, command_exists, is_root, run
 
 log = logging.getLogger(__name__)
+
+console = Console()
 
 LNXROUTER_URL = (
     "https://raw.githubusercontent.com/garywill/linux-router/master/lnxrouter"
 )
 LNXROUTER_PATH = Path("/usr/local/bin/lnxrouter")
 
-# Command -> distro package name, only where it differs from the command itself.
 PACKAGE_MAP: dict[str, dict[str, str]] = {
     "apt": {
         "iwconfig": "wireless-tools",
@@ -38,7 +44,6 @@ PACKAGE_MAP: dict[str, dict[str, str]] = {
     },
 }
 
-# Commands lnxrouter and the uplink connection logic actually shell out to.
 REQUIRED_COMMANDS = [
     "hostapd",
     "dnsmasq",
@@ -48,7 +53,11 @@ REQUIRED_COMMANDS = [
     "dhclient",
     "ip",
 ]
-OPTIONAL_COMMANDS = ["haveged", "iwconfig"]  # nice-to-have, not fatal if missing
+
+OPTIONAL_COMMANDS = [
+    "haveged",
+    "iwconfig",
+]
 
 
 @dataclass(frozen=True)
@@ -61,21 +70,37 @@ class PackageManager:
 def detect_package_manager() -> PackageManager | None:
     if command_exists("apt-get"):
         return PackageManager(
-            "apt", ["apt-get", "install", "-y"], ["apt-get", "update"]
+            "apt",
+            ["apt-get", "install", "-y"],
+            ["apt-get", "update"],
         )
+
     if command_exists("dnf"):
-        return PackageManager("dnf", ["dnf", "install", "-y"], None)
+        return PackageManager(
+            "dnf",
+            ["dnf", "install", "-y"],
+            None,
+        )
+
     if command_exists("pacman"):
         return PackageManager(
-            "pacman", ["pacman", "-S", "--noconfirm"], ["pacman", "-Sy"]
+            "pacman",
+            ["pacman", "-S", "--noconfirm"],
+            ["pacman", "-Sy"],
         )
+
     if command_exists("yum"):
-        return PackageManager("yum", ["yum", "install", "-y"], None)
+        return PackageManager(
+            "yum",
+            ["yum", "install", "-y"],
+            None,
+        )
+
     return None
 
 
 def missing_commands(commands: list[str]) -> list[str]:
-    return [c for c in commands if not command_exists(c)]
+    return [command for command in commands if not command_exists(command)]
 
 
 def check_lnxrouter() -> bool:
@@ -83,77 +108,201 @@ def check_lnxrouter() -> bool:
 
 
 def install_lnxrouter() -> None:
-    log.info(f"Downloading lnxrouter from {LNXROUTER_URL}")
+    console.print(
+        Panel(
+            "[bold]Installing lnxrouter[/bold]\n"
+            "[dim]Downloading the networking backend from GitHub...[/dim]",
+            border_style="cyan",
+            expand=False,
+        )
+    )
+
+    log.info("Downloading lnxrouter from %s", LNXROUTER_URL)
+
     try:
-        urllib.request.urlretrieve(LNXROUTER_URL, LNXROUTER_PATH)
-    except OSError as e:
-        raise EweError(f"Failed to download lnxrouter: {e}") from e
+        urllib.request.urlretrieve(
+            LNXROUTER_URL,
+            LNXROUTER_PATH,
+        )
+    except OSError as exc:
+        raise EweError(f"Failed to download lnxrouter: {exc}") from exc
 
     LNXROUTER_PATH.chmod(0o755)
-    log.info(f"Installed lnxrouter to {LNXROUTER_PATH}")
+
+    log.info("Installed lnxrouter to %s", LNXROUTER_PATH)
+
+    console.print(
+        f"  [green]✓[/green] Installed lnxrouter to [cyan]{LNXROUTER_PATH}[/cyan]"
+    )
 
 
 def install_packages(commands: list[str]) -> None:
     pm = detect_package_manager()
+
     if pm is None:
         raise EweError(
-            "Couldn't detect a supported package manager (apt/dnf/yum/pacman). "
+            "Couldn't detect a supported package manager "
+            "(apt/dnf/yum/pacman). "
             f"Please install these manually: {', '.join(commands)}"
         )
 
     pkg_map = PACKAGE_MAP.get(pm.name, {})
-    packages = sorted({pkg_map.get(c, c) for c in commands})
+    packages = sorted({pkg_map.get(command, command) for command in commands})
 
     if pm.update_cmd:
+        console.print(
+            f"  [cyan]›[/cyan] Updating package lists using [bold]{pm.name}[/bold]..."
+        )
         run(pm.update_cmd)
 
-    log.info(f"Installing via {pm.name}: {', '.join(packages)}")
+    console.print(f"  [cyan]›[/cyan] Installing [bold]{', '.join(packages)}[/bold]...")
+
+    log.info(
+        "Installing via %s: %s",
+        pm.name,
+        ", ".join(packages),
+    )
+
     run([*pm.install_cmd, *packages])
+
+    console.print("  [green]✓[/green] Packages installed.")
+
+
+def _print_dependency_status(
+    missing: list[str],
+    optional_missing: list[str],
+    lnxrouter_missing: bool,
+) -> None:
+    table = Table(
+        title="Dependency check",
+        show_header=True,
+        expand=False,
+    )
+
+    table.add_column("Dependency", style="bold")
+    table.add_column("Status")
+    table.add_column("Type")
+
+    if lnxrouter_missing:
+        table.add_row(
+            "lnxrouter",
+            "[yellow]missing[/yellow]",
+            "[red]required[/red]",
+        )
+    else:
+        table.add_row(
+            "lnxrouter",
+            "[green]ready[/green]",
+            "required",
+        )
+
+    for command in REQUIRED_COMMANDS:
+        if command in missing:
+            table.add_row(
+                command,
+                "[yellow]missing[/yellow]",
+                "[red]required[/red]",
+            )
+        else:
+            table.add_row(
+                command,
+                "[green]ready[/green]",
+                "required",
+            )
+
+    for command in OPTIONAL_COMMANDS:
+        if command in optional_missing:
+            table.add_row(
+                command,
+                "[dim]not installed[/dim]",
+                "[dim]optional[/dim]",
+            )
+        else:
+            table.add_row(
+                command,
+                "[green]ready[/green]",
+                "[dim]optional[/dim]",
+            )
+
+    console.print(table)
 
 
 def check_and_install_deps(auto_yes: bool = False) -> None:
-    """Check for lnxrouter and its runtime deps; offer to install anything missing.
+    """Check dependencies and optionally install missing requirements."""
 
-    Call this after require_root() so we're already privileged if the user
-    says yes. Raises EweError if the user declines or install fails.
-    """
-    missing_pkgs = missing_commands(REQUIRED_COMMANDS)
+    missing_required = missing_commands(REQUIRED_COMMANDS)
     missing_optional = missing_commands(OPTIONAL_COMMANDS)
-    needs_lnxrouter = not check_lnxrouter()
+    missing_lnxrouter = not check_lnxrouter()
 
-    if not missing_pkgs and not needs_lnxrouter:
+    if not missing_required and not missing_lnxrouter:
+        console.print(
+            "  [green]✓[/green] [bold]All required dependencies are available.[/bold]"
+        )
         return
 
-    print("Missing dependencies:")
-    if needs_lnxrouter:
-        print("  - lnxrouter (not on PATH)")
-    for c in missing_pkgs:
-        print(f"  - {c}")
-    if missing_optional:
-        print(
-            f"  (optional, skipping unless you want them: {', '.join(missing_optional)})"
-        )
+    _print_dependency_status(
+        missing_required,
+        missing_optional,
+        missing_lnxrouter,
+    )
+
+    required_count = len(missing_required) + int(missing_lnxrouter)
+
+    console.print()
+    console.print(
+        f"[yellow]![/yellow] "
+        f"[bold]{required_count} required "
+        f"dependency{' is' if required_count == 1 else 'ies are'} missing.[/bold]"
+    )
 
     if not auto_yes:
-        answer = input("Install missing dependencies now? [Y/n]: ").strip().lower()
-        if answer not in ("", "y", "yes"):
+        if not Confirm.ask(
+            "Install the missing dependencies now?",
+            default=True,
+        ):
             raise EweError(
-                "Missing dependencies; run with --install-deps or install them manually."
+                "Missing dependencies. Run `ewe install-deps` or install them manually."
             )
 
     if not is_root():
-        raise EweError("Installing dependencies requires root; re-run with sudo.")
+        raise EweError(
+            "Installing dependencies requires root privileges. Re-run with sudo."
+        )
 
-    if missing_pkgs:
-        install_packages(missing_pkgs)
+    console.print()
+    console.print(
+        Panel(
+            "[bold]Installing dependencies[/bold]\n[dim]This may take a moment.[/dim]",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
-    if needs_lnxrouter:
+    if missing_required:
+        install_packages(missing_required)
+
+    if missing_lnxrouter:
         install_lnxrouter()
 
     still_missing = missing_commands(REQUIRED_COMMANDS)
     lnxrouter_ok = check_lnxrouter()
-    if still_missing or not lnxrouter_ok:
-        problems = still_missing + ([] if lnxrouter_ok else ["lnxrouter"])
-        raise EweError(f"Still missing after install: {', '.join(problems)}")
 
-    print("All dependencies installed.\n")
+    if still_missing or not lnxrouter_ok:
+        problems = still_missing.copy()
+
+        if not lnxrouter_ok:
+            problems.append("lnxrouter")
+
+        raise EweError(
+            "Some dependencies are still missing after installation: "
+            + ", ".join(problems)
+        )
+
+    console.print()
+    console.print(
+        Panel(
+            "[green]✓[/green] [bold]All required dependencies are ready.[/bold]",
+            border_style="green",
+            expand=False,
+        )
+    )

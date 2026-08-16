@@ -1,7 +1,7 @@
 
 [project]
 name = "ewe"
-version = "0.1.0"
+version = "1.0.0"
 description = "Easy WiFi Extender for Linux"
 readme = "README.md"
 authors = [{ name = "PauWol", email = "paul22wof@proton.me" }]
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ewe = "ewe.cli:main"
+ewe = "ewe.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ewe"]
