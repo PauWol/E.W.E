@@ -36,10 +36,15 @@ def install_systemd_service(start_now: bool = False) -> None:
     require_root()
 
     exec_start = f"{sys.executable} -m ewe.cli --from-env"
-    SERVICE_PATH.write_text(SERVICE_TEMPLATE.format(exec_start=exec_start))
+    SERVICE_PATH.write_text(
+        SERVICE_TEMPLATE.format(exec_start=exec_start),
+        encoding="utf-8",
+    )
 
     run(["systemctl", "daemon-reload"])
+    run(["systemctl", "unmask", "ewe.service"])
     run(["systemctl", "enable", "ewe.service"])
+
     log.info(f"Installed and enabled {SERVICE_PATH}")
 
     if start_now:
