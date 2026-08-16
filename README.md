@@ -2,14 +2,14 @@
 
 # E.W.E — Easy WiFi Extender
 
-**Turn any Linux box with two WiFi radios into a seamless WiFi repeater.**
+**Turn any Linux box with two WiFi radios into a simple WiFi extender.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Built with uv](https://img.shields.io/badge/built%20with-uv-de5fe9)](https://docs.astral.sh/uv/)
 [![Linux only](https://img.shields.io/badge/platform-linux-lightgrey)](#requirements)
 
-*One interface joins your existing WiFi. The other rebroadcasts it. Same SSID, same password, no dead zones.*
+*One interface joins your existing WiFi. The other rebroadcasts it.*
 
 </div>
 
@@ -17,17 +17,22 @@
 
 ## How it works
 
-One interface (**uplink**) joins your existing network like any client. The other (**AP**) rebroadcasts it via [`lnxrouter`](https://github.com/garywill/linux-router) — the maintained successor to the abandoned `create_ap`. Both sides share one SSID/password by default, so devices roam without reconnecting.
+One interface (**uplink**) joins your existing network as a normal client. The other (**AP**) broadcasts the extended network through [`lnxrouter`](https://github.com/garywill/linux-router).
 
 ```mermaid
 flowchart LR
     R[("Your Router")] -.WiFi.-> U[Uplink interface]
+
     subgraph Box["Linux box (EWE)"]
-        U --> A[AP interface]
+        U --> N[E.W.E routing]
+        N --> A[AP interface]
     end
+
     A -.same SSID/password.-> D1[Device]
     A -.same SSID/password.-> D2[Device]
 ```
+
+EWE uses two physical WiFi radios, so the AP adapter does not need to support client + AP operation simultaneously.
 
 > [!WARNING]
 >
@@ -35,25 +40,37 @@ flowchart LR
 >
 > E.W.E is primarily designed to **extend WiFi coverage and reach**, not to guarantee the same internet speed as your main router. Because traffic passes through an additional wireless link, **download and upload speeds may be significantly slower than the original connection**, depending on your WiFi adapters, drivers, channel conditions, and network setup.
 >
-> The goal of E.W.E is simple: **more coverage, not necessarily more speed**. Performance improvements and further optimization may receive more attention in future development.
-
+> The goal of EWE is simple: **more coverage, not necessarily more speed**.
 
 ## Requirements
 
-- Linux with **two WiFi interfaces** (built-in + USB dongle works fine).
-- `systemd` (for boot autostart).
-- Root/sudo — EWE re-execs itself with `sudo` if needed.
+* Linux with **two WiFi interfaces** (built-in + USB dongle works fine).
+* `systemd` for boot autostart.
+* Root/sudo — EWE requires root privileges.
+* Python **3.11+**.
+* Internet access during initial installation to fetch `lnxrouter` and dependencies.
 
 > [!IMPORTANT]
 > The **AP-side** interface must support AP mode:
+>
 > ```bash
-> iw list | grep -A 10 "Supported interface modes" | grep AP
+> iw list
 > ```
-> No `AP` in the output → that adapter can join a network but can't host one. Cheap Realtek USB dongles are a common culprit — check reviews before buying one for this.
+>
+> Look for:
+>
+> ```text
+> Supported interface modes:
+>     * AP
+> ```
+>
+> No `AP` → that adapter cannot host the extended network.
+
+Cheap Realtek USB dongles are a common culprit, so check Linux driver support before buying one for this.
 
 ## Install
 
-One command, no pre-installed tooling required:
+One command:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
@@ -66,13 +83,13 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 ```bash
-ewe --help   # verify it landed
+ewe --help
 ```
 
 > [!WARNING]
 > **`git operation failed` / `git executable not found`**
 >
-> E.W.E installs `lnxrouter` directly from GitHub. If you see this error, Git is not installed on your system.
+> E.W.E installs `lnxrouter` directly from GitHub. If Git is missing, install it first.
 
 <details>
 <summary>Install Git</summary>
@@ -109,97 +126,219 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 
 </details>
 
-
 ## Quick start
 
 ```bash
 ewe
 ```
 
-Walks you through: dependency check & install → pick uplink/AP interfaces → SSID & password (asked once, used for both) → save to `~/ewe/.env` → optional systemd autostart → launch.
+or:
+
+```bash
+ewe --setup
+```
+
+The setup wizard walks you through:
+
+* detecting WiFi interfaces
+* choosing uplink and AP interfaces, with recommended defaults
+* entering SSID and password
+* selecting an optional AP channel
+* reviewing the configuration
+* saving it to `~/ewe/.env`
+* optionally installing and enabling systemd autostart
+
+The same SSID and password are used for both networks by default.
 
 <details>
 <summary>Example run</summary>
 
-```
-=== E.W.E — Easy WiFi Extender ===
+```text
+════════════════════════════════════════════════════════════════
+  E.W.E
+  Easy WiFi Extender — interactive setup
+════════════════════════════════════════════════════════════════
 
-Interface to CONNECT to your existing WiFi (uplink):
-  1) wlan0
-  2) wlan1
-  Choose 1-2: 1
-Interface to BROADCAST the extended AP: using 'wlan1' (only option available)
-WiFi network name (SSID) — used for both connecting and the new AP: HomeNet
-WiFi password — same for both networks:
-Channel (blank = auto):
+  › Scanning for wireless interfaces...
+  ✓ Found 2 wireless interfaces:
+    • wlan0
+    • wlan1
 
-Proceed? [Y/n]: y
-Save these settings to ~/ewe/.env for autostart on boot? [Y/n]: y
-Install + enable a systemd service so this starts automatically on boot? [Y/n]: y
-Start it now too (in addition to enabling it)? [y/N]: y
-ewe.service installed and enabled.
+[1/5] Choose wireless interfaces
+────────────────────────────────────────────────────────────────
+  Interface for connecting to your existing Wi-Fi
+
+    1) wlan0 (recommended)
+    2) wlan1
+
+  Choose [1]:
+
+  Interface for broadcasting the extended network
+
+    1) wlan1 (recommended)
+
+  ✓ Uplink: wlan0
+  ✓ AP:     wlan1
+
+[2/5] Configure Wi-Fi
+────────────────────────────────────────────────────────────────
+  Wi-Fi network name (SSID) [HomeNet]:
+  Wi-Fi password [keep saved password]:
+
+[3/5] Configure access point
+────────────────────────────────────────────────────────────────
+  Channel (blank = automatic):
+
+[4/5] Review configuration
+────────────────────────────────────────────────────────────────
+  Uplink interface  wlan0
+  AP interface      wlan1
+  SSID              HomeNet
+  Password          Ho••••••et
+  Channel           Auto
+
+  Start EWE with these settings? [Y/n]: y
+
+[5/5] Optional autostart
+────────────────────────────────────────────────────────────────
+  Save these settings to ~/ewe/.env? [Y/n]: y
+  ✓ Settings saved
+
+  Install EWE as a systemd service? [Y/n]: y
+  Start the service now? [y/N]: y
+  ✓ ewe.service installed and enabled.
 ```
 
 </details>
 
+## CLI
+
+| Command              | Description                                  |
+| -------------------- | -------------------------------------------- |
+| `ewe`                | Start the interactive setup wizard           |
+| `ewe --setup`        | Start the setup wizard explicitly            |
+| `ewe --from-env`     | Start using the saved configuration          |
+| `ewe --install-deps` | Check/install required dependencies and exit |
+| `ewe --help`         | Show CLI help                                |
+
+`--from-env` is non-interactive and is intended for systemd.
+
 ## Boot autostart
 
-Enabled during setup, `ewe.service` reads config from `~/ewe/.env` on every boot. Standard systemd controls:
+Enabled during setup, `ewe.service` runs:
+
+```bash
+ewe --from-env
+```
+
+and reads:
+
+```text
+~/ewe/.env
+```
+
+Standard systemd controls:
 
 ```bash
 sudo systemctl status ewe
 sudo systemctl restart ewe
-journalctl -u ewe -f
+sudo systemctl stop ewe
+sudo journalctl -u ewe -f
 ```
-
-Skipped it during setup? Re-run `sudo ewe` — it reuses your saved config and offers the systemd step again.
 
 ## Configuration
 
 `~/ewe/.env`, plain `KEY=value`:
 
-| Key | Meaning |
-| --- | --- |
-| `WIFI_SSID` / `WIFI_PSK` | Shared by uplink and AP |
-| `WIFI_UPLINK_IFACE` | Interface joining your existing WiFi |
-| `WIFI_AP_IFACE` | Interface broadcasting the extended AP |
-| `WIFI_CHANNEL` | Optional; blank = auto |
-| `LOG_LEVEL` / `LOG_FILE` | Default `INFO` / `~/ewe/ewe.log` |
-| `WIFI_SSID_NAME_EXTENSION` | Whether to add name extension for the AP |
-| `WIFI_POWER_SAVING_OFF` | Whether WiFi should power save | 
+| Key                        | Meaning                                    |
+| -------------------------- | ------------------------------------------ |
+| `WIFI_SSID` / `WIFI_PSK`   | Shared by uplink and AP                    |
+| `WIFI_UPLINK_IFACE`        | Interface joining your existing WiFi       |
+| `WIFI_AP_IFACE`            | Interface broadcasting the extended AP     |
+| `WIFI_CHANNEL`             | Optional; blank = auto                     |
+| `LOG_LEVEL` / `LOG_FILE`   | Default `INFO` / `~/ewe/ewe.log`           |
+| `WIFI_SSID_NAME_EXTENSION` | Whether to add a name extension for the AP |
+| `WIFI_POWER_SAVING_OFF`    | Whether WiFi power saving is disabled      |
 
-Edit by hand, or re-run `sudo ewe` to overwrite via the prompts.
+Edit by hand, or rerun:
+
+```bash
+ewe --setup
+```
+
+> [!WARNING]
+> `WIFI_PSK` is stored in plain text. Keep `~/ewe/.env` private.
 
 ## Notes
 
-> [!TIP]
-> **Sticky clients on same-SSID roaming?** Pin both interfaces to the same channel, or give the AP a distinct SSID (e.g. `HomeNet_EXT`) by hand-editing `.env`.
+> [!NOTE]
+> **NetworkManager and the AP interface**
+>
+> EWE temporarily disconnects the AP interface from NetworkManager before starting `lnxrouter`, then restores NetworkManager management when EWE exits.
+>
+> You normally do **not** need to run `nmcli` manually.
 
-> [!WARNING]
-> **NetworkManager may grab the AP interface** and fight `lnxrouter` for it. Fix:
-> ```bash
-> nmcli device set <ap_iface> managed no
-> ```
+> [!IMPORTANT]
+> EWE uses `lnxrouter --no-virt` and the physical AP interface directly. This is useful for adapters that support AP mode but do not advertise simultaneous virtual interface combinations.
+
+> [!TIP]
+> **Same SSID or separate SSID?**
+>
+> Using the same SSID and password can provide a familiar roaming experience, but client roaming is ultimately controlled by the client device. For easier testing, use a distinct AP SSID such as `HomeNet-E.W.E`.
 
 > [!NOTE]
-> Some chipsets (older Raspberry Pi Broadcom radios included) can't run client + AP mode on **one** radio simultaneously — this is why EWE needs two separate interfaces.
+> Some chipsets cannot run client + AP mode on **one** radio simultaneously. This is why EWE requires two separate WiFi interfaces.
 >
-> First boot after enabling the service: give it 20–30s to bring up the uplink before the AP can bridge through it.
->
-> The first `sudo ewe` run needs internet access (Ethernet or existing WiFi) to fetch `lnxrouter` and any missing packages.
+> The first `sudo ewe` run needs internet access to fetch `lnxrouter` and any missing dependencies.
+
+## Troubleshooting
+
+Check the interfaces:
+
+```bash
+iw dev
+```
+
+Check AP support:
+
+```bash
+iw list
+```
+
+Check drivers:
+
+```bash
+ethtool -i wlan0
+ethtool -i wlan1
+```
+
+Check NetworkManager:
+
+```bash
+nmcli device status
+```
+
+Check EWE logs:
+
+```bash
+sudo journalctl -u ewe -f
+```
+
+For hardware-specific issues, include the output of the commands above when reporting a problem.
 
 ## Uninstall
 
 ```bash
 sudo systemctl disable --now ewe.service
 sudo rm -f /etc/systemd/system/ewe.service
+sudo systemctl daemon-reload
 uv tool uninstall ewe
 rm -rf ~/ewe
 ```
 
 ## Contributing
 
-Issues and PRs welcome, especially reports from unusual hardware or non-Debian distros.
+Issues and PRs welcome, especially reports from unusual hardware, WiFi drivers, and non-Debian distributions.
 
 ## License
 
