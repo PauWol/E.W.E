@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -198,3 +199,12 @@ def recommend_wifi_interfaces(
     )
 
     return str(uplink["iface"]), str(ap["iface"])
+
+
+def run(
+    command: list[str],
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[Any]:
+    log.debug("Running: %s", " ".join(command))
+    kwargs.setdefault("check", True)
+    return subprocess.run(command, **kwargs)
