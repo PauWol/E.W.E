@@ -36,21 +36,60 @@ class WifiRepeater:
 
     def _connect_uplink_nmcli(self, ssid: str, password: str, timeout: int) -> None:
         log.info(f"Connecting {self.wifi_iface} to '{ssid}' via NetworkManager")
+
+        connection_name = f"ewe-uplink-{self.wifi_iface}"
+
         try:
+            # Remove an old E.W.E profile if one exists.
+            run(
+                ["nmcli", "connection", "delete", connection_name],
+                check=False,
+            )
+
+            # Create the WiFi profile explicitly.
             run(
                 [
                     "nmcli",
-                    "device",
+                    "connection",
+                    "add",
+                    "type",
                     "wifi",
-                    "connect",
-                    ssid,
-                    "password",
-                    password,
                     "ifname",
                     self.wifi_iface,
+                    "con-name",
+                    connection_name,
+                    "ssid",
+                    ssid,
                 ],
                 timeout=timeout,
             )
+
+            # Explicitly configure WPA-PSK.
+            run(
+                [
+                    "nmcli",
+                    "connection",
+                    "modify",
+                    connection_name,
+                    "wifi-sec.key-mgmt",
+                    "wpa-psk",
+                    "wifi-sec.psk",
+                    password,
+                ],
+                timeout=timeout,
+            )
+
+            # Bring the connection up.
+            run(
+                [
+                    "nmcli",
+                    "connection",
+                    "up",
+                    connection_name,
+                ],
+                timeout=timeout,
+            )
+
         except subprocess.CalledProcessError as e:
             raise EweError(
                 f"Failed to connect {self.wifi_iface} to '{ssid}': {e}"
