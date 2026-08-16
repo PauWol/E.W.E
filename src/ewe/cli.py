@@ -1,159 +1,519 @@
 from __future__ import annotations
 
+import argparse
 import getpass
 import logging
+import os
 import sys
+from collections.abc import Sequence
 
 from ewe.foundation import constants
 from ewe.foundation.install import check_and_install_deps
 from ewe.foundation.log import setup_logging
-from ewe.foundation.util import EweError, list_wifi_interfaces, require_root
+from ewe.foundation.util import (
+    EweError,
+    list_wifi_interfaces,
+    recommend_wifi_interfaces,
+    require_root,
+)
 from ewe.wifi.repeater import WifiRepeater
 from ewe.wifi.service import install_systemd_service
 
 log = logging.getLogger(__name__)
 
 
-# ---------- small prompt helpers ----------
+# ---------------------------------------------------------------------------
+# Terminal UI
+# ---------------------------------------------------------------------------
+
+
+def _supports_color() -> bool:
+    return (
+        sys.stdout.isatty()
+        and os.environ.get("NO_COLOR") is None
+        and os.environ.get("TERMINAL_NO_COLOR") is None
+    )
+
+
+_COLOR = _supports_color()
+
+
+def _style(text: str, code: str) -> str:
+    if not _COLOR:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _bold(text: str) -> str:
+    return _style(text, "1")
+
+
+def _dim(text: str) -> str:
+    return _style(text, "2")
+
+
+def _green(text: str) -> str:
+    return _style(text, "32")
+
+
+def _yellow(text: str) -> str:
+    return _style(text, "33")
+
+
+def _red(text: str) -> str:
+    return _style(text, "31")
+
+
+def _cyan(text: str) -> str:
+    return _style(text, "36")
+
+
+def _line(char: str = "─", width: int = 64) -> None:
+    print(char * width)
+
+
+def _header(title: str, subtitle: str | None = None) -> None:
+    print()
+    _line("═")
+    print(f"  {_bold(title)}")
+    if subtitle:
+        print(f"  {_dim(subtitle)}")
+    _line("═")
+    print()
+
+
+def _step(number: int, total: int, title: str) -> None:
+    print(f"\n{_cyan(f'[{number}/{total}]')} {_bold(title)}")
+    _line()
+
+
+def _ok(text: str) -> None:
+    print(f"  {_green('✓')} {text}")
+
+
+def _warn(text: str) -> None:
+    print(f"  {_yellow('!')} {text}")
+
+
+def _error(text: str) -> None:
+    print(f"  {_red('✗')} {text}")
+
+
+def _info(text: str) -> None:
+    print(f"  {_cyan('›')} {text}")
+
+
+# ---------------------------------------------------------------------------
+# Prompt helpers
+# ---------------------------------------------------------------------------
 
 
 def _prompt(text: str, default: str = "") -> str:
-    suffix = f" [{default}]" if default else ""
-    value = input(f"{text}{suffix}: ").strip()
+    suffix = f" {_dim(f'[{default}]')}" if default else ""
+    try:
+        value = input(f"  {text}{suffix}: ").strip()
+    except EOFError as exc:
+        raise EweError(
+            "Input is unavailable. Are you running EWE interactively?"
+        ) from exc
+
     return value or default
 
 
 def _prompt_password(text: str, default: str = "") -> str:
-    suffix = " [keep saved password]" if default else ""
-    value = getpass.getpass(f"{text}{suffix}: ").strip()
+    suffix = f" {_dim('[keep saved password]')}" if default else ""
+
+    try:
+        value = getpass.getpass(f"  {text}{suffix}: ").strip()
+    except EOFError as exc:
+        raise EweError("Password input is unavailable.") from exc
+
     return value or default
 
 
 def _prompt_yes_no(text: str, default_yes: bool = True) -> bool:
-    suffix = " [Y/n]" if default_yes else " [y/N]"
-    value = input(f"{text}{suffix}: ").strip().lower()
+    suffix = "[Y/n]" if default_yes else "[y/N]"
+
+    try:
+        value = input(f"  {text} {_dim(suffix)}: ").strip().lower()
+    except EOFError as exc:
+        raise EweError(
+            "Input is unavailable. Are you running EWE interactively?"
+        ) from exc
+
     if not value:
         return default_yes
-    return value in ("y", "yes")
+
+    if value in {"y", "yes"}:
+        return True
+
+    if value in {"n", "no"}:
+        return False
+
+    print(f"  {_yellow('Please answer yes or no.')}")
+    return _prompt_yes_no(text, default_yes)
 
 
-def _choose_interface(prompt: str, interfaces: list[str], exclude: str = "") -> str:
-    choices = [i for i in interfaces if i != exclude]
-    if not choices:
-        raise EweError("No wireless interfaces left to choose from.")
+def _prompt_int(
+    text: str,
+    default: int | None = None,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+    allow_blank: bool = True,
+) -> int | None:
+    while True:
+        default_text = str(default) if default is not None else ""
+        value = _prompt(text, default_text)
 
-    if len(choices) == 1:
-        print(f"{prompt}: using '{choices[0]}' (only option available)")
-        return choices[0]
+        if not value and allow_blank:
+            return None
 
-    print(f"{prompt}:")
-    for idx, name in enumerate(choices, start=1):
-        print(f"  {idx}) {name}")
+        try:
+            parsed = int(value)
+        except ValueError:
+            _warn("Please enter a number.")
+            continue
+
+        if minimum is not None and parsed < minimum:
+            _warn(f"Value must be at least {minimum}.")
+            continue
+
+        if maximum is not None and parsed > maximum:
+            _warn(f"Value must be at most {maximum}.")
+            continue
+
+        return parsed
+
+
+def _choose_from_list(
+    title: str,
+    choices: Sequence[str],
+    *,
+    default: str | None = None,
+    exclude: str | None = None,
+) -> str:
+    filtered = [choice for choice in choices if choice != exclude]
+
+    if not filtered:
+        raise EweError("No wireless interfaces are available for this selection.")
+
+    if len(filtered) == 1:
+        only = filtered[0]
+        _info(f"{title}: using {_bold(only)} (only available option)")
+        return only
+
+    default_index = None
+    if default in filtered:
+        default_index = filtered.index(default) + 1
+
+    print(f"  {title}")
+    print()
+
+    for index, name in enumerate(filtered, start=1):
+        marker = ""
+        if default_index == index:
+            marker = f" {_green('(recommended)')}"
+        print(f"    {_bold(str(index))}) {name}{marker}")
 
     while True:
-        raw = input(f"  Choose 1-{len(choices)}: ").strip()
-        if raw.isdigit() and 1 <= int(raw) <= len(choices):
-            return choices[int(raw) - 1]
-        print("  Invalid choice, try again.")
+        prompt = "Choose"
+        if default_index is not None:
+            prompt += f" [{default_index}]"
+
+        raw = input(f"  {prompt}: ").strip()
+
+        if not raw and default_index is not None:
+            return filtered[default_index - 1]
+
+        if raw.isdigit():
+            index = int(raw)
+            if 1 <= index <= len(filtered):
+                return filtered[index - 1]
+
+        _warn(f"Choose a number between 1 and {len(filtered)}.")
 
 
-# ---------- core launch, shared by both entrypoints ----------
+# ---------------------------------------------------------------------------
+# Validation / display
+# ---------------------------------------------------------------------------
+
+
+def _validate_wifi_credentials(ssid: str, password: str) -> None:
+    if not ssid:
+        raise EweError("SSID cannot be empty.")
+
+    if not password:
+        raise EweError("Wi-Fi password cannot be empty.")
+
+    if len(ssid.encode()) > 32:
+        raise EweError("SSID must be at most 32 bytes long.")
+
+    if len(password) < 8:
+        raise EweError("Wi-Fi password must be at least 8 characters long.")
+
+    if len(password) > 63:
+        raise EweError("Wi-Fi password must be at most 63 characters long.")
+
+
+def _mask_secret(value: str) -> str:
+    if not value:
+        return "—"
+
+    if len(value) <= 4:
+        return "•" * len(value)
+
+    return f"{value[:2]}{'•' * (len(value) - 4)}{value[-2:]}"
+
+
+def _print_summary(
+    *,
+    wifi_iface: str,
+    ap_iface: str,
+    ssid: str,
+    password: str,
+    channel: int | None,
+) -> None:
+    print()
+    _line()
+    print(f"  {_bold('Configuration')}")
+    _line()
+
+    rows = [
+        ("Uplink interface", wifi_iface),
+        ("AP interface", ap_iface),
+        ("SSID", ssid),
+        ("Password", _mask_secret(password)),
+        ("Channel", str(channel) if channel is not None else "Auto"),
+    ]
+
+    width = max(len(label) for label, _ in rows)
+
+    for label, value in rows:
+        print(f"  {label:<{width}}  {_cyan(value)}")
+
+    _line()
+
+
+# ---------------------------------------------------------------------------
+# Core launch
+# ---------------------------------------------------------------------------
 
 
 def _launch(
-    wifi_iface: str, ap_iface: str, ssid: str, password: str, channel: int | None
+    wifi_iface: str,
+    ap_iface: str,
+    ssid: str,
+    password: str,
+    channel: int | None,
 ) -> None:
-    repeater = WifiRepeater(ap_iface=ap_iface, wifi_iface=wifi_iface)
+    _info(f"Connecting to {_bold(ssid)} using {_bold(wifi_iface)}...")
+
+    repeater = WifiRepeater(
+        ap_iface=ap_iface,
+        wifi_iface=wifi_iface,
+    )
+
     repeater.connect_uplink(ssid, password)
-    repeater.start_ap(ssid, password, channel=channel)
+
+    _ok("Uplink connected.")
+
+    _info(
+        f"Starting access point on {_bold(ap_iface)}"
+        + (f" (channel {channel})" if channel else " (automatic channel)")
+        + "..."
+    )
+
+    repeater.start_ap(
+        ssid,
+        password,
+        channel=channel,
+    )
+
+    _ok("Access point started.")
+    print()
+    print(f"  {_green('✓')} {_bold('EWE is running.')}")
 
 
-# ---------- interactive walkthrough ----------
+# ---------------------------------------------------------------------------
+# Interactive setup
+# ---------------------------------------------------------------------------
 
 
 def run_walkthrough() -> None:
-    print("=== E.W.E \u2014 Easy WiFi Extender ===\n")
+    _header(
+        "E.W.E",
+        "Easy WiFi Extender — interactive setup",
+    )
 
+    _info("Scanning for wireless interfaces...")
     interfaces = list_wifi_interfaces()
+
     if len(interfaces) < 2:
         raise EweError(
-            f"Found {len(interfaces)} wireless interface(s); EWE needs two "
-            "(one to join your existing WiFi, one to broadcast the extended AP)."
+            f"Found {len(interfaces)} wireless interface(s). "
+            "EWE requires at least two: one for the uplink and one for the AP."
         )
 
-    wifi_iface = _choose_interface(
-        "Interface to CONNECT to your existing WiFi (uplink)", interfaces
+    _ok(f"Found {len(interfaces)} wireless interfaces:")
+    for interface in interfaces:
+        print(f"    • {interface}")
+
+    try:
+        recommended_uplink, recommended_ap = recommend_wifi_interfaces(interfaces)
+    except Exception as exc:
+        log.debug("Interface recommendation failed", exc_info=True)
+        recommended_uplink = interfaces[0]
+        recommended_ap = interfaces[1]
+
+        _warn("Could not determine the best interface pairing.")
+        _info("Using the first two available interfaces as defaults.")
+
+    _step(1, 5, "Choose wireless interfaces")
+
+    wifi_iface = _choose_from_list(
+        "Interface for connecting to your existing Wi-Fi",
+        interfaces,
+        default=recommended_uplink,
     )
-    ap_iface = _choose_interface(
-        "Interface to BROADCAST the extended AP", interfaces, exclude=wifi_iface
+
+    ap_iface = _choose_from_list(
+        "Interface for broadcasting the extended network",
+        interfaces,
+        default=recommended_ap if recommended_ap != wifi_iface else None,
+        exclude=wifi_iface,
     )
+
+    _ok(f"Uplink: {_bold(wifi_iface)}")
+    _ok(f"AP:     {_bold(ap_iface)}")
+
+    _step(2, 5, "Configure Wi-Fi")
 
     ssid = _prompt(
-        "WiFi network name (SSID) \u2014 used for both connecting and the new AP",
+        "Wi-Fi network name (SSID)",
         constants.WIFI_SSID,
     )
+
     password = _prompt_password(
-        "WiFi password \u2014 same for both networks", constants.WIFI_PSK
+        "Wi-Fi password",
+        constants.WIFI_PSK,
     )
-    if not ssid or not password:
-        raise EweError("SSID and password are both required.")
 
-    channel_raw = _prompt("Channel (blank = auto)", constants.WIFI_CHANNEL)
-    channel = int(channel_raw) if channel_raw else None
+    _validate_wifi_credentials(ssid, password)
 
-    print("\nSummary:")
-    print(f"  Uplink interface : {wifi_iface}")
-    print(f"  AP interface     : {ap_iface}")
-    print(f"  SSID             : {ssid}")
-    print(f"  Channel          : {channel or 'auto'}\n")
+    _ok("Wi-Fi credentials look valid.")
 
-    if not _prompt_yes_no("Proceed?"):
-        print("Aborted.")
+    _step(3, 5, "Configure access point")
+
+    configured_channel: int | None = None
+
+    if constants.WIFI_CHANNEL:
+        try:
+            configured_channel = int(constants.WIFI_CHANNEL)
+        except ValueError:
+            _warn(f"Ignoring invalid configured channel: {constants.WIFI_CHANNEL!r}")
+
+    channel = _prompt_int(
+        "Channel (blank = automatic)",
+        configured_channel,
+        minimum=1,
+        maximum=196,
+    )
+
+    _step(4, 5, "Review configuration")
+
+    _print_summary(
+        wifi_iface=wifi_iface,
+        ap_iface=ap_iface,
+        ssid=ssid,
+        password=password,
+        channel=channel,
+    )
+
+    if not _prompt_yes_no("Start EWE with these settings?", default_yes=True):
+        print()
+        _warn("Setup cancelled.")
         return
 
-    if _prompt_yes_no("Save these settings to ~/ewe/.env for autostart on boot?"):
+    _step(5, 5, "Optional autostart")
+
+    save_settings = _prompt_yes_no(
+        "Save these settings to ~/ewe/.env?",
+        default_yes=True,
+    )
+
+    if save_settings:
         constants.set_env("WIFI_SSID", ssid)
         constants.set_env("WIFI_PSK", password)
         constants.set_env("WIFI_AP_IFACE", ap_iface)
         constants.set_env("WIFI_UPLINK_IFACE", wifi_iface)
-        constants.set_env("WIFI_CHANNEL", channel or "")
-        print(f"Saved to {constants.ENV_PATH}")
+        constants.set_env(
+            "WIFI_CHANNEL",
+            str(channel) if channel is not None else "",
+        )
 
-        if _prompt_yes_no(
-            "Install + enable a systemd service so this starts automatically on boot?"
-        ):
+        _ok(f"Settings saved to {constants.ENV_PATH}")
+
+        install_service = _prompt_yes_no(
+            "Install EWE as a systemd service?",
+            default_yes=True,
+        )
+
+        if install_service:
             start_now = _prompt_yes_no(
-                "Start it now too (in addition to enabling it)?", default_yes=False
+                "Start the service now?",
+                default_yes=False,
             )
+
+            _info("Installing systemd service...")
             install_systemd_service(start_now=start_now)
-            print("ewe.service installed and enabled.")
+            _ok("ewe.service installed and enabled.")
+
             if start_now:
-                print(
-                    "It's already running \u2014 you don't need to launch it manually below."
-                )
+                print()
+                _ok("EWE is now managed by systemd.")
                 return
 
-    _launch(wifi_iface, ap_iface, ssid, password, channel)
+    print()
+    _line()
+    _info("Starting EWE manually...")
+    _line()
+
+    _launch(
+        wifi_iface,
+        ap_iface,
+        ssid,
+        password,
+        channel,
+    )
 
 
-# ---------- non-interactive entrypoint (used by the systemd service) ----------
+# ---------------------------------------------------------------------------
+# Environment / systemd mode
+# ---------------------------------------------------------------------------
 
 
 def run_from_env() -> None:
-    missing = [k for k in ("WIFI_SSID", "WIFI_PSK") if not getattr(constants, k)]
+    missing = [key for key in ("WIFI_SSID", "WIFI_PSK") if not getattr(constants, key)]
+
     if missing:
         raise EweError(
             f"Missing {', '.join(missing)} in {constants.ENV_PATH}. "
-            "Run the interactive walkthrough once first: `ewe --setup`."
+            "Run `ewe --setup` first."
         )
 
     if not constants.WIFI_AP_IFACE or not constants.WIFI_UPLINK_IFACE:
         raise EweError(
-            "WIFI_AP_IFACE / WIFI_UPLINK_IFACE not set. "
-            "Run the interactive walkthrough once first: `ewe --setup`."
+            "WIFI_AP_IFACE / WIFI_UPLINK_IFACE are not configured. "
+            "Run `ewe --setup` first."
         )
 
-    channel = int(constants.WIFI_CHANNEL) if constants.WIFI_CHANNEL else None
+    try:
+        channel = int(constants.WIFI_CHANNEL) if constants.WIFI_CHANNEL else None
+    except ValueError as exc:
+        raise EweError(
+            f"Invalid WIFI_CHANNEL={constants.WIFI_CHANNEL!r} in {constants.ENV_PATH}."
+        ) from exc
 
     _launch(
         constants.WIFI_UPLINK_IFACE,
@@ -164,38 +524,95 @@ def run_from_env() -> None:
     )
 
 
-# ---------- entrypoint ----------
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="ewe",
+        description="Easy WiFi Extender",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  ewe                 Start the interactive setup wizard\n"
+            "  ewe --setup         Run the setup wizard\n"
+            "  ewe --from-env      Start using saved settings\n"
+            "  ewe --install-deps  Install/check required dependencies\n"
+        ),
+    )
+
+    mode = parser.add_mutually_exclusive_group()
+
+    mode.add_argument(
+        "--setup",
+        action="store_true",
+        help="Run the interactive setup wizard.",
+    )
+
+    mode.add_argument(
+        "--from-env",
+        action="store_true",
+        help="Start EWE using the saved configuration.",
+    )
+
+    mode.add_argument(
+        "--install-deps",
+        action="store_true",
+        help="Install/check required system dependencies and exit.",
+    )
+
+    return parser
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
     constants.load_dot_env()
     setup_logging()
     require_root()
 
     try:
-        if "--install-deps" in sys.argv:
-            # Standalone: just fix dependencies and exit, don't launch anything.
+        if args.install_deps:
+            _header("E.W.E", "Dependency check")
             check_and_install_deps(auto_yes=True)
-            print("Dependencies OK.")
+            _ok("Dependencies are ready.")
             return
 
-        from_env = "--from-env" in sys.argv
+        from_env = args.from_env
 
-        # Every real run checks first — a stale/broken install shouldn't
-        # get halfway into bringing up interfaces before failing. The
-        # boot/systemd path has no tty to answer a prompt, so it installs
-        # silently rather than blocking forever.
+        # Interactive setup can answer dependency prompts itself.
+        # Non-interactive/systemd mode must never block.
         check_and_install_deps(auto_yes=from_env)
 
         if from_env:
             run_from_env()
         else:
             run_walkthrough()
-    except EweError as e:
-        log.error(str(e))
+
+    except EweError as exc:
+        _error(str(exc))
         sys.exit(1)
+
     except KeyboardInterrupt:
-        print("\nAborted.")
+        print()
+        _warn("Aborted by user.")
+        sys.exit(130)
+
+    except ValueError as exc:
+        _error(str(exc))
+        sys.exit(1)
+
+    except Exception:
+        log.exception("Unexpected EWE failure")
+        _error("Unexpected error. Check the EWE logs for details.")
         sys.exit(1)
 
 

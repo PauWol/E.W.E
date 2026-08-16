@@ -56,7 +56,7 @@ flowchart LR
 One command, no pre-installed tooling required:
 
 ```bash
-sudo curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
+curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 Already have `uv`?
@@ -66,7 +66,7 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 ```bash
-sudo ewe --help   # verify it landed
+ewe --help   # verify it landed
 ```
 
 > [!WARNING]
@@ -113,7 +113,7 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 ## Quick start
 
 ```bash
-sudo ewe
+ewe
 ```
 
 Walks you through: dependency check & install → pick uplink/AP interfaces → SSID & password (asked once, used for both) → save to `~/ewe/.env` → optional systemd autostart → launch.

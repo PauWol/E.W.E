@@ -5,12 +5,13 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
 class EweError(RuntimeError):
-    """Raised for expected, user-facing EWE failures (not a bug, just bad input/state)."""
+    """Raised for expected, user-facing EWE failures."""
 
 
 def command_exists(name: str) -> bool:
@@ -22,12 +23,6 @@ def is_root() -> bool:
 
 
 def require_root() -> None:
-    """Re-exec the current process under sudo if it isn't already root.
-
-    EWE needs root to bring up interfaces and run hostapd/dnsmasq via
-    lnxrouter. Rather than failing with a permissions error, we transparently
-    re-exec with sudo so the walkthrough still feels like a single command.
-    """
     if is_root():
         return
 
@@ -39,7 +34,6 @@ def require_root() -> None:
 
 
 def has_networkmanager() -> bool:
-    """True if NetworkManager is installed and its systemd unit is active."""
     if not command_exists("nmcli"):
         return False
 
@@ -51,24 +45,156 @@ def has_networkmanager() -> bool:
 
 
 def list_wifi_interfaces() -> list[str]:
-    """Return the names of all wireless interfaces on this machine."""
     if not command_exists("iw"):
         raise EweError(
             "'iw' is required to detect wireless interfaces (apt install iw)."
         )
 
-    result = subprocess.run(["iw", "dev"], check=True, capture_output=True, text=True)
+    result = subprocess.run(
+        ["iw", "dev"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
     interfaces: list[str] = []
+
     for line in result.stdout.splitlines():
         line = line.strip()
+
         if line.startswith("Interface "):
             interfaces.append(line.split("Interface ", 1)[1].strip())
 
     return interfaces
 
 
-def run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
-    log.debug(f"Running: {' '.join(command)}")
-    kwargs.setdefault("check", True)
-    return subprocess.run(command, **kwargs)
+def _wifi_driver(interface: str) -> str | None:
+    """Return the kernel driver used by a WiFi interface."""
+    driver_link = Path(f"/sys/class/net/{interface}/device/driver")
+
+    try:
+        return driver_link.resolve().name
+    except FileNotFoundError:
+        return None
+
+
+def _wifi_phy(interface: str) -> str | None:
+    """Return the PHY/radio name backing an interface, e.g. phy0."""
+    phy = Path(f"/sys/class/net/{interface}/phy80211")
+
+    try:
+        return phy.resolve().name
+    except FileNotFoundError:
+        return None
+
+
+def _supports_ap(interface: str) -> bool:
+    """Return whether the interface advertises AP mode."""
+    result = subprocess.run(
+        ["iw", "phy", _wifi_phy(interface) or "", "info"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        return False
+
+    return " * AP" in result.stdout or " AP\n" in result.stdout
+
+
+def recommend_wifi_interfaces(
+    interfaces: list[str] | None = None,
+) -> tuple[str, str]:
+    """
+    Recommend (uplink_interface, ap_interface).
+
+    Preference:
+      - AP should not use brcmfmac.
+      - AP interface should support AP mode.
+      - Separate physical PHYs are preferred.
+
+    Raises:
+        EweError: if no viable AP interface exists.
+    """
+    interfaces = interfaces or list_wifi_interfaces()
+
+    if len(interfaces) < 2:
+        raise EweError("EWE needs at least two WiFi interfaces for repeater mode.")
+
+    info: list[dict[str, object]] = []
+
+    for iface in interfaces:
+        driver = _wifi_driver(iface)
+        phy = _wifi_phy(iface)
+        ap = _supports_ap(iface)
+
+        info.append(
+            {
+                "iface": iface,
+                "driver": driver,
+                "phy": phy,
+                "ap": ap,
+            }
+        )
+
+    # Prefer a non-brcmfmac interface that supports AP mode.
+    ap_candidates = [
+        item for item in info if item["ap"] and item["driver"] != "brcmfmac"
+    ]
+
+    # Fall back to any interface supporting AP mode.
+    if not ap_candidates:
+        ap_candidates = [item for item in info if item["ap"]]
+
+    if not ap_candidates:
+        raise EweError("None of the detected WiFi interfaces report AP mode support.")
+
+    # Pick the first usable AP interface.
+    ap = ap_candidates[0]
+
+    # Prefer another physical radio for the uplink.
+    uplink_candidates = [
+        item
+        for item in info
+        if item["iface"] != ap["iface"] and item["phy"] != ap["phy"]
+    ]
+
+    # Fall back to another interface if there is no separate PHY.
+    if not uplink_candidates:
+        uplink_candidates = [item for item in info if item["iface"] != ap["iface"]]
+
+    if not uplink_candidates:
+        raise EweError("Could not find a second WiFi interface for the uplink.")
+
+    uplink = uplink_candidates[0]
+
+    # User-facing warnings.
+    if ap["driver"] == "brcmfmac":
+        log.warning(
+            "AP interface %s uses the brcmfmac driver.",
+            ap["iface"],
+        )
+        log.warning("brcmfmac may not support station + AP operation reliably.")
+        log.warning(
+            "lnxrouter may refuse this configuration or the driver may "
+            "cause kernel instability."
+        )
+        log.warning("See: https://github.com/oblique/create_ap/issues/203")
+
+    if ap["phy"] == uplink["phy"]:
+        log.warning(
+            "WARNING: %s and %s use the same WiFi radio (%s).",
+            uplink["iface"],
+            ap["iface"],
+            ap["phy"],
+        )
+        log.warning("Two interface names do not necessarily mean two physical radios.")
+
+    log.info(
+        "Recommended WiFi configuration: uplink=%s, AP=%s",
+        uplink["iface"],
+        ap["iface"],
+    )
+
+    return str(uplink["iface"]), str(ap["iface"])
