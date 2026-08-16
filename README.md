@@ -47,17 +47,17 @@ flowchart LR
 One command, no pre-installed tooling required:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
+sudo curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 Already have `uv`?
 
 ```bash
-uv tool install "git+https://github.com/PauWol/E.W.E"
+sudo uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 ```bash
-ewe --help   # verify it landed
+sudo ewe --help   # verify it landed
 ```
 
 > [!WARNING]
@@ -95,7 +95,7 @@ sudo zypper install git
 Then retry:
 
 ```bash
-uv tool install "git+https://github.com/PauWol/E.W.E"
+sudo uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 </details>
