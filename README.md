@@ -8,6 +8,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Built with uv](https://img.shields.io/badge/built%20with-uv-de5fe9)](https://docs.astral.sh/uv/)
 [![Linux only](https://img.shields.io/badge/platform-linux-lightgrey)](#requirements)
+[![AI Assisted](https://img.shields.io/badge/AI-Assisted%20Development-8A2BE2?logo=openai&logoColor=white)](#-ai-development-disclosure)
 
 *One interface joins your existing WiFi. The other rebroadcasts it.*
 
@@ -335,6 +336,20 @@ sudo systemctl daemon-reload
 uv tool uninstall ewe
 rm -rf ~/ewe
 ```
+
+## AI Development Disclosure
+
+**E.W.E is developed with human-led engineering and AI-assisted development.**
+
+| Area | Development |
+| --- | --- |
+| Core utilities | Human-designed and implemented |
+| Architecture & structure | Human-designed and implemented |
+| Project concept | Entirely human-originated |
+| WiFi repeater logic | Human + AI collaboration, iterated through testing |
+| CLI & UX | AI-generated, currently under human review and validation |
+
+AI-generated code is reviewed, tested, and refined before being treated as production-ready.
 
 ## Contributing
 
