@@ -21,12 +21,12 @@ One interface (**uplink**) joins your existing network like any client. The othe
 
 ```mermaid
 flowchart LR
-    R[("📡 Your Router")] -.WiFi.-> U[Uplink interface]
+    R[("Your Router")] -.WiFi.-> U[Uplink interface]
     subgraph Box["Linux box (EWE)"]
         U --> A[AP interface]
     end
-    A -.same SSID/password.-> D1[💻 Device]
-    A -.same SSID/password.-> D2[📱 Device]
+    A -.same SSID/password.-> D1[Device]
+    A -.same SSID/password.-> D2[Device]
 ```
 
 ## Requirements
