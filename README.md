@@ -60,6 +60,47 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 ewe --help   # verify it landed
 ```
 
+> [!WARNING]
+> **`git operation failed` / `git executable not found`**
+>
+> E.W.E installs `lnxrouter` directly from GitHub. If you see this error, Git is not installed on your system.
+
+<details>
+<summary>Install Git</summary>
+
+**Arch / CachyOS**
+
+```bash
+sudo pacman -S git
+```
+
+**Debian / Ubuntu / Raspberry Pi OS**
+
+```bash
+sudo apt install git
+```
+
+**Fedora**
+
+```bash
+sudo dnf install git
+```
+
+**openSUSE**
+
+```bash
+sudo zypper install git
+```
+
+Then retry:
+
+```bash
+uv tool install "git+https://github.com/PauWol/E.W.E"
+```
+
+</details>
+
+
 ## Quick start
 
 ```bash
