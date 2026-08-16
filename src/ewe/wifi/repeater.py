@@ -4,6 +4,7 @@ import logging
 import subprocess
 
 from ewe.foundation.util import EweError, command_exists, has_networkmanager, run
+from ewe.foundation.constants import WIFI_SSID_NAME_EXTENSION
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +136,9 @@ class WifiRepeater:
         (Ctrl+C or SIGTERM) — lnxrouter owns hostapd/dnsmasq/iptables
         cleanup on exit, so we don't want to detach from it.
         """
+        if WIFI_SSID_NAME_EXTENSION:
+            ssid = f"{ssid}-E.W.E"
+
         command = [
             "lnxrouter",
             "--ap",
