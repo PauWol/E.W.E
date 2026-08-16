@@ -1,4 +1,5 @@
 import os
+import pwd
 from pathlib import Path
 from typing import TypeVar
 
@@ -8,11 +9,17 @@ T = TypeVar("T")
 
 
 def path(p: str | Path) -> Path:
-    """Expand '~' and return a Path."""
     return Path(p).expanduser()
 
 
-ENV_PATH = path("~/ewe/.env")
+def user_home() -> Path:
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        return Path(pwd.getpwnam(sudo_user).pw_dir)
+    return Path.home()
+
+
+ENV_PATH = user_home() / "ewe/.env"
 
 
 def load_dot_env() -> bool:
