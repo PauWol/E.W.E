@@ -175,6 +175,38 @@ class WifiRepeater:
         run(["dhclient", self.wifi_iface], timeout=timeout)
 
     # ---------- access point (bridge Internet from wifi_iface) ----------
+    def _prepare_ap_interface(self) -> None:
+        """Release the AP interface from NetworkManager."""
+        if has_networkmanager():
+            log.info(
+                "Releasing %s from NetworkManager for AP mode",
+                self.ap_iface,
+            )
+
+            run(
+                ["nmcli", "device", "disconnect", self.ap_iface],
+                check=False,
+            )
+
+            # Prevent NetworkManager from immediately reconnecting it.
+            run(
+                [
+                    "nmcli",
+                    "device",
+                    "set",
+                    self.ap_iface,
+                    "managed",
+                    "no",
+                ],
+                check=False,
+            )
+
+        run(
+            ["ip", "link", "set", self.ap_iface, "down"],
+            check=False,
+        )
+
+        log.info("%s is ready for AP mode", self.ap_iface)
 
     def start_ap(
         self,
@@ -183,6 +215,9 @@ class WifiRepeater:
         channel: int | None = None,
     ) -> None:
         """Start the repeater AP."""
+
+        self._prepare_ap_interface()
+
         if WIFI_SSID_NAME_EXTENSION:
             ssid = f"{ssid}-E.W.E"
 
@@ -195,16 +230,52 @@ class WifiRepeater:
             password,
             "-o",
             self.wifi_iface,
+            "--no-virt",
         ]
 
         if channel is not None:
             command.extend(["--channel", str(channel)])
 
         log.info(
-            "Starting access point '%s' on %s, bridging from %s",
+            "Starting access point '%s' on %s, routing through %s",
             ssid,
             self.ap_iface,
             self.wifi_iface,
         )
 
-        subprocess.run(command, check=True)
+        try:
+            run(command)
+        except subprocess.CalledProcessError as exc:
+            raise EweError(
+                f"Failed to start AP on {self.ap_iface}: "
+                f"lnxrouter exited with status {exc.returncode}"
+            ) from exc
+
+    def cleanup(self) -> None:
+        """Release EWE's control of the Wi-Fi interfaces."""
+
+        log.info("Cleaning up Wi-Fi interfaces")
+
+        # Stop lnxrouter if it is still running.
+        run(
+            ["pkill", "-TERM", "-f", "lnxrouter"],
+            check=False,
+        )
+
+        if has_networkmanager():
+            run(
+                [
+                    "nmcli",
+                    "device",
+                    "set",
+                    self.ap_iface,
+                    "managed",
+                    "yes",
+                ],
+                check=False,
+            )
+
+            log.info(
+                "Returned %s to NetworkManager",
+                self.ap_iface,
+            )

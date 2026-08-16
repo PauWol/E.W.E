@@ -314,25 +314,30 @@ def _launch(
         wifi_iface=wifi_iface,
     )
 
-    repeater.connect_uplink(ssid, password)
+    try:
+        repeater.connect_uplink(ssid, password)
 
-    _ok("Uplink connected.")
+        _ok("Uplink connected.")
 
-    _info(
-        f"Starting access point on {_bold(ap_iface)}"
-        + (f" (channel {channel})" if channel else " (automatic channel)")
-        + "..."
-    )
+        _info(
+            f"Starting access point on {_bold(ap_iface)}"
+            + (f" (channel {channel})" if channel else " (automatic channel)")
+            + "..."
+        )
 
-    repeater.start_ap(
-        ssid,
-        password,
-        channel=channel,
-    )
+        repeater.start_ap(
+            ssid,
+            password,
+            channel=channel,
+        )
 
-    _ok("Access point started.")
-    print()
-    print(f"  {_green('✓')} {_bold('EWE is running.')}")
+        _ok("Access point started.")
+        print()
+        print(f"  {_green('✓')} {_bold('EWE is running.')}")
+
+    finally:
+        # This runs when the process is interrupted or an exception occurs.
+        repeater.cleanup()
 
 
 # ---------------------------------------------------------------------------
