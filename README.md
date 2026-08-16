@@ -165,6 +165,8 @@ Skipped it during setup? Re-run `sudo ewe` — it reuses your saved config and o
 | `WIFI_AP_IFACE` | Interface broadcasting the extended AP |
 | `WIFI_CHANNEL` | Optional; blank = auto |
 | `LOG_LEVEL` / `LOG_FILE` | Default `INFO` / `~/ewe/ewe.log` |
+| `WIFI_SSID_NAME_EXTENSION` | Whether to add name extension for the AP |
+| `WIFI_POWER_SAVING_OFF` | Whether WiFi should power save | 
 
 Edit by hand, or re-run `sudo ewe` to overwrite via the prompts.
 
