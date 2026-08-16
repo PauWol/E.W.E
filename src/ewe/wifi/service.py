@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ Wants=NetworkManager.service
 
 [Service]
 Type=simple
+Environment="HOME={home}"
 ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
@@ -28,16 +30,28 @@ WantedBy=multi-user.target
 
 
 def install_systemd_service(start_now: bool = False) -> None:
-    """Write, enable (and optionally start) the ewe.service unit.
+    """Install and enable the E.W.E systemd service.
 
-    On boot this runs the CLI's non-interactive entrypoint, which reads
-    SSID/password/interfaces straight from ~/ewe/.env — no prompts.
+    The service runs as root, but HOME is set to the user that invoked
+    EWE through sudo so ~/ewe/.env resolves to the user's config.
     """
     require_root()
 
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        import pwd
+
+        home = Path(pwd.getpwnam(sudo_user).pw_dir)
+    else:
+        home = Path.home()
+
     exec_start = f"{sys.executable} -m ewe.cli --from-env"
+
     SERVICE_PATH.write_text(
-        SERVICE_TEMPLATE.format(exec_start=exec_start),
+        SERVICE_TEMPLATE.format(
+            exec_start=exec_start,
+            home=home,
+        ),
         encoding="utf-8",
     )
 
@@ -45,7 +59,8 @@ def install_systemd_service(start_now: bool = False) -> None:
     run(["systemctl", "unmask", "ewe.service"])
     run(["systemctl", "enable", "ewe.service"])
 
-    log.info(f"Installed and enabled {SERVICE_PATH}")
+    log.info("Installed and enabled %s", SERVICE_PATH)
+    log.info("Using config: %s", home / "ewe/.env")
 
     if start_now:
         run(["systemctl", "start", "ewe.service"])
