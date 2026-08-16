@@ -84,7 +84,7 @@ uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 ```bash
-ewe --help
+ewe --help # make sure it landed
 ```
 
 > [!WARNING]
@@ -136,7 +136,7 @@ ewe
 or:
 
 ```bash
-ewe --setup
+ewe setup
 ```
 
 The setup wizard walks you through:
@@ -266,14 +266,14 @@ For a normal user, I’d recommend just `uv tool upgrade ewe`; the `--force` com
 | `ewe --help`         | Show CLI help                                |
 | `ewe --version` | Show the Version of E.W.E installed |
 
-`--from-env` is non-interactive and is intended for systemd.
+`from-env` is non-interactive and is intended for systemd.
 
 ## Boot autostart
 
 Enabled during setup, `ewe.service` runs:
 
 ```bash
-ewe --from-env
+ewe from-env
 ```
 
 and reads:
@@ -308,7 +308,7 @@ sudo journalctl -u ewe -f
 Edit by hand, or rerun:
 
 ```bash
-ewe --setup
+ewe setup
 ```
 
 > [!WARNING]
