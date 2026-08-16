@@ -29,6 +29,15 @@ flowchart LR
     A -.same SSID/password.-> D2[Device]
 ```
 
+> [!WARNING]
+>
+> ### Performance vs. Range
+>
+> E.W.E is primarily designed to **extend WiFi coverage and reach**, not to guarantee the same internet speed as your main router. Because traffic passes through an additional wireless link, **download and upload speeds may be significantly slower than the original connection**, depending on your WiFi adapters, drivers, channel conditions, and network setup.
+>
+> The goal of E.W.E is simple: **more coverage, not necessarily more speed**. Performance improvements and further optimization may receive more attention in future development.
+
+
 ## Requirements
 
 - Linux with **two WiFi interfaces** (built-in + USB dongle works fine).
