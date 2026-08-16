@@ -47,13 +47,13 @@ flowchart LR
 One command, no pre-installed tooling required:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/EWE"
+curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 Already have `uv`?
 
 ```bash
-uv tool install "git+https://github.com/PauWol/EWE"
+uv tool install "git+https://github.com/PauWol/E.W.E"
 ```
 
 ```bash
