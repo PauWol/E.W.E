@@ -212,6 +212,31 @@ The same SSID and password are used for both networks by default.
 
 </details>
 
+## Update
+
+Already installed E.W.E? Update the `uv` tool directly from the repository:
+
+```bash
+uv tool upgrade ewe
+````
+
+To reinstall the latest repository version explicitly:
+
+```bash
+uv tool install --force "git+https://github.com/PauWol/E.W.E"
+```
+
+Check the installed version with:
+
+```bash
+ewe --version
+```
+
+```
+
+For a normal user, I’d recommend just `uv tool upgrade ewe`; the `--force` command is useful when you want to explicitly refresh the Git-based installation.
+
+
 ## CLI
 
 | Command              | Description                                  |
