@@ -155,59 +155,79 @@ The same SSID and password are used for both networks by default.
 <summary>Example run</summary>
 
 ```text
-════════════════════════════════════════════════════════════════
-  E.W.E
-  Easy WiFi Extender — interactive setup
-════════════════════════════════════════════════════════════════
-
+pi@ewe:~ $ ewe
+[18:32:30] INFO     ewe.foundation.util       Root privileges required, re-running with sudo...
+  ✓ All required dependencies are available.
+╭────────────────────────────────────────╮
+│ E.W.E                                  │
+│ Easy WiFi Extender — interactive setup │
+╰────────────────────────────────────────╯
   › Scanning for wireless interfaces...
   ✓ Found 2 wireless interfaces:
-    • wlan0
     • wlan1
+    • wlan0
+[18:32:32] INFO     ewe.foundation.util       Recommended WiFi configuration: uplink=wlan0, AP=wlan1
 
 [1/5] Choose wireless interfaces
-────────────────────────────────────────────────────────────────
-  Interface for connecting to your existing Wi-Fi
-
-    1) wlan0 (recommended)
-    2) wlan1
-
-  Choose [1]:
-
-  Interface for broadcasting the extended network
-
-    1) wlan1 (recommended)
-
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Interface for connecting to your existing WiFi
+    1) wlan1
+    2) wlan0 (recommended)
+  Choose (2): 
+  › Interface for broadcasting the extended network: using wlan1 (only option available)
   ✓ Uplink: wlan0
   ✓ AP:     wlan1
 
-[2/5] Configure Wi-Fi
-────────────────────────────────────────────────────────────────
-  Wi-Fi network name (SSID) [HomeNet]:
-  Wi-Fi password [keep saved password]:
+[2/5] Configure WiFi
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+WiFi network name (SSID) (): homenet
+WiFi password (): 
+  ✓ WiFi credentials look valid.
 
 [3/5] Configure access point
-────────────────────────────────────────────────────────────────
-  Channel (blank = automatic):
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Channel (blank = automatic) (): 
 
 [4/5] Review configuration
-────────────────────────────────────────────────────────────────
-  Uplink interface  wlan0
-  AP interface      wlan1
-  SSID              HomeNet
-  Password          Ho••••••et
-  Channel           Auto
-
-  Start EWE with these settings? [Y/n]: y
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+         Configuration         
+┌──────────────────┬──────────┐
+│ Uplink interface │ wlan0    │
+│ AP interface     │ wlan1    │
+│ SSID             │ homenet  │
+│ Password         │ ho••••et │
+│ Channel          │ Auto     │
+└──────────────────┴──────────┘
+Start EWE with these settings? [y/n] (y): 
 
 [5/5] Optional autostart
-────────────────────────────────────────────────────────────────
-  Save these settings to ~/ewe/.env? [Y/n]: y
-  ✓ Settings saved
-
-  Install EWE as a systemd service? [Y/n]: y
-  Start the service now? [y/N]: y
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Save these settings to ~/ewe/.env? [y/n] (y): 
+  ✓ Settings saved to /home/pi/ewe/.env
+Install EWE as a systemd service? [y/n] (y): 
+Start the service now? [y/n] (n): 
+  › Installing systemd service...
+Created symlink '/etc/systemd/system/multi-user.target.wants/ewe.service' → '/etc/systemd/system/ewe.service'.
+[18:32:50] INFO     ewe.wifi.service          Installed and enabled /etc/systemd/system/ewe.service
+[18:32:50] INFO     ewe.wifi.service          Using config: /home/pi/ewe/.env
   ✓ ewe.service installed and enabled.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  › Starting EWE manually...
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  › Connecting to homenet using wlan0...
+[18:32:50] INFO     ewe.wifi.repeater         Connecting wlan0 to 'homenet' via NetworkManager
+Connection 'ewe-uplink-wlan0' (d325e72c-7c4e-46ad-a56c-6be6fe3cfede) successfully deleted.
+Connection 'ewe-uplink-wlan0' (8317b7df-a2d2-43a2-bfba-1ced986fae0c) successfully added.
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/4)
+[18:32:53] INFO     ewe.wifi.repeater         Disabled WiFi power saving on wlan0
+[18:32:53] INFO     ewe.wifi.repeater         Disabled WiFi power saving on wlan1
+  ✓ Uplink connected.
+  › Starting access point on wlan1 (automatic channel)...
+[18:32:53] INFO     ewe.wifi.repeater         Releasing wlan1 from NetworkManager for AP mode
+Device 'wlan1' successfully disconnected.
+[18:32:54] INFO     ewe.wifi.repeater         wlan1 is ready for AP mode
+[18:32:54] INFO     ewe.wifi.repeater         Starting access point 'homenet-E.W.E' on wlan1, routing through wlan0
+...
 ```
 
 </details>
