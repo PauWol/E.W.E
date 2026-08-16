@@ -79,6 +79,7 @@ def set_env(key: str, value: T):  # pyright: ignore[reportInvalidTypeVarUse]
         if l.startswith(f"{key}="):
             lines[i] = f"{key}={value}"
             _updated = True
+            break
 
     if not _updated:
         lines.append(f"{key}={value}")
