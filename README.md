@@ -90,7 +90,7 @@ ewe --help # make sure it landed
 > [!WARNING]
 > **`git operation failed` / `git executable not found`**
 >
-> E.W.E installs `lnxrouter` directly from GitHub. If Git is missing, install it first.
+> E.W.E is installed directly from GitHub. If Git is missing, install it first.
 
 <details>
 <summary>Install Git</summary>
